@@ -1,0 +1,310 @@
+@page "/EventDetails/{Id}"
+@using LumixApp.Models
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+
+<PageTitle>Event Details</PageTitle>
+
+<div class="container mt-4">
+    @if (isLoading)
+    {
+        <div class="text-center my-5">
+            <div class="spinner-border text-primary" role="status"></div>
+            <p class="mt-2">Loading event details...</p>
+        </div>
+    }
+    else if (eventItem == null)
+    {
+        <div class="alert alert-warning">Event not found.</div>
+        <button class="btn btn-primary" @onclick='() => Nav.NavigateTo("/ViewEvents")'>Back to Events</button>
+    }
+    else
+    {
+        <div class="row">
+            <div class="col-md-8">
+                <div class="card shadow-sm mb-4">
+                    @if (!string.IsNullOrEmpty(eventItem.Cover))
+                    {
+                        <img src="@eventItem.Cover" class="card-img-top object-fit-cover" style="max-height: 400px;" alt="@eventItem.Title" />
+                    }
+                    <div class="card-body">
+                        <h2 class="card-title text-primary fw-bold">@eventItem.Title</h2>
+                        <ul class="list-unstyled text-muted mb-4 d-flex gap-4 border-bottom pb-3">
+                            <li><i class="bi bi-calendar-event me-2 text-primary"></i> @eventItem.Date</li>
+                            <li><i class="bi bi-geo-alt me-2 text-primary"></i> @eventItem.Location</li>
+                        </ul>
+                        <h4>About this Event</h4>
+                        <p class="card-text" style="white-space: pre-wrap;">@eventItem.Description</p>
+                    </div>
+                </div>
+
+                <!-- Feedback Section -->
+                <div class="card shadow-sm border-0 overflow-hidden">
+                    <div class="card-header bg-dark text-white p-3">
+                        <h5 class="mb-0"><i class="bi bi-chat-left-dots me-2"></i>Event Feedback</h5>
+                    </div>
+                    <div class="card-body p-4">
+                        @if (hasAlreadySubmittedFeedback)
+                        {
+                            <div class="text-center py-4">
+                                <div class="mb-3">
+                                    <i class="bi bi-check-circle-fill text-success" style="font-size: 3rem;"></i>
+                                </div>
+                                <h4 class="fw-bold">Feedback Received!</h4>
+                                <p class="text-muted">You have already shared your thoughts on this event. Thank you for your contribution!</p>
+                            </div>
+                        }
+                        else if (isAttendeeAndJoined)
+                        {
+                            <EditForm Model="@feedback" OnValidSubmit="SubmitFeedback">
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">Your Name</label>
+                                    <InputText required class="form-control form-control-lg bg-light" @bind-value="feedback.StudentName" placeholder="Enter your name" />
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">Student ID</label>
+                                    <InputText required class="form-control bg-light" @bind-value="feedback.StudentId" readonly />
+                                </div>
+                                <div class="mb-3">
+                                    <div class="d-flex justify-content-between align-items-end mb-2">
+                                        <label class="form-label fw-bold mb-0">Share Your Experience</label>
+                                        <small class="badge @(feedback.Experience?.Length > 450 ? "bg-danger" : "bg-secondary")">
+                                            @(feedback.Experience?.Length ?? 0) / 500
+                                        </small>
+                                    </div>
+                                    <InputTextArea required class="form-control" rows="4" 
+                                                   @bind-value="feedback.Experience" 
+                                                   maxlength="500"
+                                                   placeholder="What did you think of the event? (Min 10, Max 500 characters)"></InputTextArea>
+                                </div>
+                                <div class="mb-4">
+                                    <label class="form-label fw-bold">Overall Rating</label>
+                                    <div class="d-flex gap-3 align-items-center">
+                                        <InputNumber required min="1" max="5" class="form-control" style="width: 80px;" @bind-value="feedback.Rating" />
+                                        <span class="text-warning">
+                                            @for (int i = 0; i < feedback.Rating; i++) { <i class="bi bi-star-fill me-1"></i> }
+                                            @for (int i = feedback.Rating; i < 5; i++) { <i class="bi bi-star me-1"></i> }
+                                        </span>
+                                    </div>
+                                </div>
+                                <button type="submit" class="btn btn-primary w-100 btn-lg shadow-sm" disabled="@isSubmittingFeedback">
+                                    @if (isSubmittingFeedback)
+                                    {
+                                        <span class="spinner-border spinner-border-sm me-2"></span>
+                                        <span>Saving Feedback...</span>
+                                    }
+                                    else
+                                    {
+                                        <span>Submit My Review</span>
+                                    }
+                                </button>
+                            </EditForm>
+                        }
+                        else
+                        {
+                            <div class="text-center py-2">
+                                <div class="mb-3">
+                                    <i class="bi bi-person-check text-muted" style="font-size: 2.5rem;"></i>
+                                </div>
+                                <h5 class="fw-bold">Verify Your Attendance</h5>
+                                <p class="text-muted small mb-4">Did you join this event? Confirm your attendance to unlock the feedback form.</p>
+                                
+                                <div class="bg-light p-3 rounded-3 mb-4">
+                                    <div class="mb-3">
+                                        <input type="text" class="form-control text-center" @bind="verifyStudentId" placeholder="Enter Registered Student ID" />
+                                    </div>
+                                    <div class="form-check d-inline-block text-start mb-3">
+                                        <input class="form-check-input" type="checkbox" @bind="isSelfDeclared" id="attendCheck">
+                                        <label class="form-check-label small" for="attendCheck">
+                                            I confirm that I participated in this event.
+                                        </label>
+                                    </div>
+                                    <button class="btn btn-dark w-100 py-2 shadow-sm" @onclick="VerifyAndJoin" disabled="@(isVerifyingCode || !isSelfDeclared)">
+                                        @if (isVerifyingCode)
+                                        {
+                                            <span class="spinner-border spinner-border-sm me-2"></span>
+                                            <span>Verifying...</span>
+                                        }
+                                        else
+                                        {
+                                            <span>Confirm & Unlock Feedback</span>
+                                        }
+                                    </button>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="card shadow border-0 mb-4 overflow-hidden">
+                    <div class="card-header bg-primary text-white p-3 border-0">
+                        <h5 class="mb-0 text-center"><i class="bi bi-pencil-square me-2"></i>RSVP Gateway</h5>
+                    </div>
+                    <div class="card-body p-4">
+                        <p class="text-center text-muted small mb-4">Secure your spot in the auditorium. Registration is mandatory for participation.</p>
+                        <EditForm Model="@rsvp" OnValidSubmit="SubmitRSVP">
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold">Student Name</label>
+                                <InputText required class="form-control bg-light" @bind-value="rsvp.StudentName" placeholder="Full Name" />
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold">University ID</label>
+                                <InputText required class="form-control bg-light" @bind-value="rsvp.StudentId" placeholder="e.g. ST12345" />
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100 btn-lg shadow" disabled="@isSubmittingRsvp">
+                                @(isSubmittingRsvp ? "Processing..." : "Confirm My Seat")
+                            </button>
+                        </EditForm>
+                    </div>
+                </div>
+                
+                <div class="card bg-light border-0 shadow-sm p-3">
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-info-circle-fill text-primary fs-4 me-3"></i>
+                        <p class="small mb-0 text-muted">A certificate of participation will be issued based on your attendance verification.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@if (!string.IsNullOrEmpty(statusMessage))
+{
+    <div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 2000;">
+        <div class="toast show animate__animated animate__fadeInUp @(statusMessage.StartsWith("Error") ? "text-bg-danger" : "text-bg-success") border-0 shadow-lg" role="alert">
+            <div class="d-flex p-2">
+                <div class="toast-body">
+                    <i class="bi @(statusMessage.StartsWith("Error") ? "bi-exclamation-triangle" : "bi-check-circle") me-2"></i>
+                    @statusMessage
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" @onclick='() => statusMessage = ""'></button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public string Id { get; set; }
+
+    private Event eventItem;
+    private RSVP rsvp = new RSVP();
+    private Feedback feedback = new Feedback();
+    
+    private bool isLoading = true;
+    private bool isSubmittingRsvp = false;
+    private bool isSubmittingFeedback = false;
+    private bool isVerifyingCode = false;
+    private bool isAttendeeAndJoined = false;
+    private bool isSelfDeclared = false;
+    private bool hasAlreadySubmittedFeedback = false;
+    private string statusMessage = "";
+    private string verifyStudentId = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        isLoading = true;
+        try
+        {
+            eventItem = await JS.InvokeAsync<Event>("firebaseInterop.getEventById", Id);
+            rsvp.EventId = Id;
+            feedback.EventId = Id;
+        }
+        catch (Exception) { eventItem = null; }
+        finally { isLoading = false; }
+    }
+
+    private async Task SubmitRSVP()
+    {
+        isSubmittingRsvp = true;
+        statusMessage = "";
+        try
+        {
+            rsvp.Timestamp = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss");
+            await JS.InvokeVoidAsync("firebaseInterop.saveRSVP", rsvp);
+            statusMessage = "Your RSVP has been confirmed! We'll see you there.";
+            verifyStudentId = rsvp.StudentId; // Pre-fill for check-in
+            rsvp = new RSVP { EventId = Id };
+        }
+        catch (Exception ex) { statusMessage = "Error: " + ex.Message; }
+        finally { isSubmittingRsvp = false; }
+    }
+
+    private async Task SubmitFeedback()
+    {
+        if (string.IsNullOrWhiteSpace(feedback.Experience) || feedback.Experience.Length < 10)
+        {
+            statusMessage = "Error: Feedback must be at least 10 characters long.";
+            return;
+        }
+
+        isSubmittingFeedback = true;
+        statusMessage = "";
+        try
+        {
+            // Sanitization
+            feedback.Experience = System.Text.RegularExpressions.Regex.Replace(feedback.Experience, "<.*?>", string.Empty);
+            feedback.StudentName = System.Text.RegularExpressions.Regex.Replace(feedback.StudentName ?? "", "<.*?>", string.Empty);
+
+            await JS.InvokeVoidAsync("firebaseInterop.saveFeedback", feedback);
+            statusMessage = "Thank you! Your feedback helps us improve future events.";
+            isAttendeeAndJoined = false;
+            hasAlreadySubmittedFeedback = true;
+            feedback = new Feedback { EventId = Id, StudentId = verifyStudentId };
+        }
+        catch (Exception ex) { statusMessage = "Error: " + ex.Message; }
+        finally { isSubmittingFeedback = false; }
+    }
+
+    private async Task VerifyAndJoin()
+    {
+        if (string.IsNullOrWhiteSpace(verifyStudentId))
+        {
+            statusMessage = "Error: University ID is required to verify your RSVP.";
+            return;
+        }
+
+        if (!isSelfDeclared)
+        {
+            statusMessage = "Error: Please check the box to confirm your attendance.";
+            return;
+        }
+
+        isVerifyingCode = true;
+        statusMessage = "";
+        try
+        {
+            // Check if already submitted
+            bool alreadySubmitted = await JS.InvokeAsync<bool>("firebaseInterop.checkDuplicateFeedback", Id, verifyStudentId);
+            if (alreadySubmitted)
+            {
+                statusMessage = "Error: Multiple submissions detected. You've already reviewed this event.";
+                hasAlreadySubmittedFeedback = true;
+                return;
+            }
+
+            var rsvps = await JS.InvokeAsync<List<RSVP>>("firebaseInterop.getAllRSVPs");
+            var record = rsvps?.FirstOrDefault(r => 
+                r.EventId == Id && 
+                r.StudentId.Equals(verifyStudentId, StringComparison.OrdinalIgnoreCase));
+
+            if (record == null)
+            {
+                statusMessage = "Error: No matching RSVP found. Did you use the correct ID?";
+                return;
+            }
+
+            // Update attendance (Self-declaration)
+            await JS.InvokeVoidAsync("firebaseInterop.updateRSVPAttendance", record.Id, true);
+            
+            isAttendeeAndJoined = true;
+            feedback.StudentId = verifyStudentId;
+            feedback.StudentName = record.StudentName;
+            statusMessage = "Verification successful! Feedback form is now available.";
+        }
+        catch (Exception ex) { statusMessage = "Error: " + ex.Message; }
+        finally { isVerifyingCode = false; }
+    }
+}

@@ -1,0 +1,171 @@
+@page "/AdminDashboard"
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+@using LumixApp.Models
+
+<PageTitle>Admin Dashboard - Lumix Digital Events</PageTitle>
+
+<div class="container mt-4 mb-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold" style="color: #002147;">Admin Overview</h2>
+            <p class="text-muted">System summary and statistics.</p>
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status"></div>
+            <p class="mt-2 text-muted">Loading metrics...</p>
+        </div>
+    }
+    else
+    {
+        <!-- Key Metrics Cards -->
+        <div class="row g-4 mb-5">
+            <div class="col-md-4">
+                <div class="card shadow-sm border-0 border-start border-4 border-primary h-100">
+                    <div class="card-body">
+                        <h6 class="text-muted text-uppercase mb-2">Total Events</h6>
+                        <h3 class="fw-bold text-dark mb-0">@events.Count</h3>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card shadow-sm border-0 border-start border-4 border-success h-100">
+                    <div class="card-body">
+                        <h6 class="text-muted text-uppercase mb-2">Total Registrations</h6>
+                        <h3 class="fw-bold text-dark mb-0">@rsvps.Count</h3>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card shadow-sm border-0 border-start border-4 border-info h-100">
+                    <div class="card-body">
+                        <h6 class="text-muted text-uppercase mb-2">Students Joined</h6>
+                        <h3 class="fw-bold text-dark mb-0">@rsvps.Count(r => r.IsAttended)</h3>
+                        <small class="text-muted">Actual attendance recorded</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card shadow-sm border-0 border-start border-4 border-warning h-100">
+                    <div class="card-body">
+                        <h6 class="text-muted text-uppercase mb-2">Feedback Submissions</h6>
+                        <h3 class="fw-bold text-dark mb-0">@feedbackList.Count</h3>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card shadow-sm border-0 border-start border-4 border-secondary h-100">
+                    <div class="card-body">
+                        <h6 class="text-muted text-uppercase mb-2">Registered Users</h6>
+                        <h3 class="fw-bold text-dark mb-0">@users.Count</h3>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-lg-6 mb-4">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-header bg-white border-0 pt-4 pb-0">
+                        <h5 style="color: #800000;" class="fw-bold">Recent Events</h5>
+                    </div>
+                    <div class="card-body">
+                        @if (!events.Any())
+                        {
+                            <p class="text-muted">No events available.</p>
+                        }
+                        else
+                        {
+                            <ul class="list-group list-group-flush">
+                                @foreach (var item in events.Take(5))
+                                {
+                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                        @item.Title 
+                                        <span class="badge bg-primary rounded-pill">@item.Date</span>
+                                    </li>
+                                }
+                            </ul>
+                        }
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-6 mb-4">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-header bg-white border-0 pt-4 pb-0">
+                        <h5 style="color: #800000;" class="fw-bold">Recent Feedback</h5>
+                    </div>
+                    <div class="card-body">
+                        @if (!feedbackList.Any())
+                        {
+                            <p class="text-muted">No feedback received yet.</p>
+                        }
+                        else
+                        {
+                            <ul class="list-group list-group-flush">
+                                @foreach (var fb in feedbackList.Take(5))
+                                {
+                                    <li class="list-group-item">
+                                        <div class="d-flex justify-content-between">
+                                            <span class="fw-bold small">@fb.StudentName</span>
+                                            <span class="text-warning">
+                                                @for (int i = 0; i < fb.Rating; i++) { <i class="bi bi-star-fill"></i> }
+                                            </span>
+                                        </div>
+                                        <p class="mb-0 text-muted small mt-1">@fb.Experience</p>
+                                    </li>
+                                }
+                            </ul>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private bool isLoading = true;
+    private List<EventViewModel> events = new();
+    private List<RSVPViewModel> rsvps = new();
+    private List<FeedbackViewModel> feedbackList = new();
+    private List<UserViewModel> users = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = await JS.InvokeAsync<AuthUser>("firebaseAuth.getUser");
+        if (user == null || !user.Email.Equals("admin@lumix.edu", StringComparison.OrdinalIgnoreCase))
+        {
+            Nav.NavigateTo("/Login");
+            return;
+        }
+
+        await LoadDashboardData();
+    }
+
+    private async Task LoadDashboardData()
+    {
+        isLoading = true;
+        try
+        {
+            events = await JS.InvokeAsync<List<EventViewModel>>("firebaseInterop.getEvents");
+            rsvps = await JS.InvokeAsync<List<RSVPViewModel>>("firebaseInterop.getAllRSVPs");
+            feedbackList = await JS.InvokeAsync<List<FeedbackViewModel>>("firebaseInterop.getAllFeedback");
+            users = await JS.InvokeAsync<List<UserViewModel>>("firebaseInterop.getAllUsers");
+        }
+        catch { }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    public class EventViewModel : Event { public string Id { get; set; } }
+    public class RSVPViewModel : RSVP { public string Id { get; set; } }
+    public class FeedbackViewModel : Feedback { public string Id { get; set; } }
+    public class UserViewModel { public string Id { get; set; }  public string Email { get; set; } public string Role { get; set; } }
+    public class AuthUser { public string Email { get; set; } }
+}

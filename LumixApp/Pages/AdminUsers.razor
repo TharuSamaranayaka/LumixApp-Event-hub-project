@@ -1,0 +1,198 @@
+@page "/AdminUsers"
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+
+<PageTitle>Event Registrations - Admin</PageTitle>
+
+<div class="container mt-4 mb-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold" style="color: #002147;">Event Registrations</h2>
+            <p class="text-muted">View and manage student registrations and attendance.</p>
+        </div>
+    </div>
+    
+    @if(isLoading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status"></div>
+            <p class="mt-2 text-muted">Fetching registrations...</p>
+        </div>
+    }
+    else if (registrations == null || !registrations.Any())
+    {
+        <div class="alert alert-info border-0 shadow-sm text-center py-5">
+            <i class="bi bi-calendar-event fs-1 mb-3 d-block text-primary"></i>
+            <h4>No Registrations Found</h4>
+            <p>Students registering for events will populate this list.</p>
+        </div>
+    }
+    else
+    {
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-4">Student Name (ID)</th>
+                                <th>Event Name</th>
+                                <th>Registered Date</th>
+                                <th class="text-center">Attendance</th>
+                                <th class="text-end pe-4">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var reg in registrations)
+                            {
+                                <tr>
+                                    <td class="ps-4 fw-bold text-primary">
+                                        <i class="bi bi-person-circle me-2 text-muted"></i>@reg.StudentName (@reg.StudentId)
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-info text-dark">@reg.EventName</span>
+                                    </td>
+                                    <td>
+                                        @if(!string.IsNullOrEmpty(reg.Timestamp) && reg.Timestamp != "Unknown")
+                                        {
+                                            try {
+                                                <span class="small text-muted">@DateTime.Parse(reg.Timestamp).ToString("g")</span>
+                                            } catch {
+                                                <span class="small text-muted">@reg.Timestamp</span>
+                                            }
+                                        }
+                                        else 
+                                        {
+                                            <span class="small text-muted">Unknown</span>
+                                        }
+                                    </td>
+                                    <td class="text-center">
+                                        @if(reg.IsAttended)
+                                        {
+                                            <button class="btn btn-sm btn-success rounded-pill px-3" @onclick="()=>ToggleAttendance(reg)">
+                                                <i class="bi bi-patch-check-fill me-1"></i> Joined
+                                            </button>
+                                        }
+                                        else
+                                        {
+                                            <button class="btn btn-sm btn-outline-secondary rounded-pill px-3" @onclick="()=>ToggleAttendance(reg)">
+                                                Mark as Joined
+                                            </button>
+                                        }
+                                    </td>
+                                    <td class="text-end pe-4">
+                                        <button class="btn btn-sm btn-outline-danger" @onclick="()=>ConfirmDelete(reg.Id)">
+                                            <i class="bi bi-trash"></i> Remove
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@if(!string.IsNullOrEmpty(statusMessage))
+{
+    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+        <div class="toast show align-items-center text-bg-warning border-0" role="alert">
+            <div class="d-flex">
+                <div class="toast-body">
+                    @statusMessage
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" @onclick='() => statusMessage = ""'></button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<RegistrationViewModel> registrations = new();
+    private bool isLoading = true;
+    string statusMessage = "";
+    
+    protected override async Task OnInitializedAsync()
+    {
+        var authUser = await JS.InvokeAsync<AuthUser>("firebaseAuth.getUser");
+        if (authUser == null || !authUser.Email.Equals("admin@lumix.edu", StringComparison.OrdinalIgnoreCase))
+        {
+            Nav.NavigateTo("/Login");
+            return;
+        }
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        try
+        {
+            var rsvps = await JS.InvokeAsync<List<RsvpModel>>("firebaseInterop.getAllRSVPs");
+            var events = await JS.InvokeAsync<List<EventModel>>("firebaseInterop.getEvents");
+            
+            if (rsvps != null)
+            {
+                registrations = rsvps.Select(r => new RegistrationViewModel
+                {
+                    Id = r.Id,
+                    StudentName = r.StudentName ?? "Unknown Student",
+                    StudentId = r.StudentId ?? "N/A",
+                    EventName = events?.FirstOrDefault(e => e.Id == r.EventId)?.Title ?? "Unknown Event",
+                    Timestamp = r.Timestamp ?? (r.Created ?? "Unknown"),
+                    IsAttended = r.IsAttended
+                }).ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            statusMessage = "Error connecting to database: " + ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task ToggleAttendance(RegistrationViewModel reg)
+    {
+        try
+        {
+            reg.IsAttended = !reg.IsAttended;
+            await JS.InvokeVoidAsync("firebaseInterop.updateRSVPAttendance", reg.Id, reg.IsAttended);
+            // Optional: Show status or just let UI update if using local state
+        }
+        catch (Exception ex)
+        {
+            statusMessage = "Error updating attendance: " + ex.Message;
+        }
+    }
+
+    public class RegistrationViewModel { public string Id { get; set; } public string StudentName { get; set; } public string StudentId { get; set; } public string EventName { get; set; } public string Timestamp { get; set; } public bool IsAttended { get; set; } }
+    public class RsvpModel { public string Id { get; set; } public string EventId { get; set; } public string StudentName { get; set; } public string StudentId { get; set; } public string Created { get; set; } public string Timestamp { get; set; } public bool IsAttended { get; set; } }
+    public class EventModel { public string Id { get; set; } public string Title { get; set; } }
+    public class AuthUser { public string Email { get; set; } }
+
+    private async Task ConfirmDelete(string id)
+    {
+        if(await JS.InvokeAsync<bool>("confirm", "Are you sure you want to remove this registration?"))
+        {
+            statusMessage = "";
+            try
+            {
+                await JS.InvokeVoidAsync("firebaseInterop.deleteRSVP", id);
+                // Manually remove from local list for immediate UI update
+                registrations.RemoveAll(r => r.Id == id);
+                statusMessage = "Registration successfully removed.";
+                StateHasChanged(); // Force UI refresh
+                await LoadData(); // Re-sync with server
+            }
+            catch (Exception ex)
+            {
+                statusMessage = "Error deleting registration: " + ex.Message;
+            }
+        }
+    }
+}

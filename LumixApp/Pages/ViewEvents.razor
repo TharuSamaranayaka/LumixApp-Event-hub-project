@@ -1,0 +1,208 @@
+@using LumixApp.Models;
+@page "/ViewEvents"
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+
+<PageTitle>Campus Events</PageTitle>
+
+<div class="container mt-4">
+    <div class="row mb-4 align-items-center">
+        <div class="col-md-6 mb-3 mb-md-0">
+            <h2 class="fw-bold mb-0">Campus Events</h2>
+        </div>
+        <div class="col-md-6">
+            <div class="input-group shadow-sm border rounded-pill" style="overflow: hidden;">
+                <span class="input-group-text bg-white border-0 py-3 ps-4">
+                    <i class="bi bi-search text-primary fs-5"></i>
+                </span>
+                <input type="text" class="form-control border-0 py-3" 
+                       placeholder="Filter by title or location..." 
+                       @bind="searchText" @bind:event="oninput"
+                       style="box-shadow: none; font-size: 1.1rem;" />
+            </div>
+        </div>
+    </div>
+
+    <div class="d-flex flex-wrap gap-2 mb-4 justify-content-between align-items-center">
+        <div class="d-inline-flex background-light border p-1" style="border-radius: 50px;">
+            <button class="btn @(currentFilter == "All" ? "btn-primary shadow-sm" : "btn-light bg-transparent border-0 text-muted")" 
+                    style="border-radius: 50px; padding: 6px 20px; font-weight: 500; transition: all 0.3s;"
+                    @onclick='() => SetFilter("All")'>All</button>
+            <button class="btn @(currentFilter == "Upcoming" ? "btn-primary shadow-sm" : "btn-light bg-transparent border-0 text-muted")" 
+                    style="border-radius: 50px; padding: 6px 20px; font-weight: 500; transition: all 0.3s;"
+                    @onclick='() => SetFilter("Upcoming")'>Upcoming</button>
+            <button class="btn @(currentFilter == "Ongoing" ? "btn-primary shadow-sm" : "btn-light bg-transparent border-0 text-muted")" 
+                    style="border-radius: 50px; padding: 6px 20px; font-weight: 500; transition: all 0.3s;"
+                    @onclick='() => SetFilter("Ongoing")'>Ongoing</button>
+        </div>
+        
+        @if (!string.IsNullOrEmpty(searchText))
+        {
+            <div class="text-muted small">
+                Showing results for "<span class="fw-bold text-dark">@searchText</span>"
+                <button class="btn btn-sm btn-link text-danger p-0 ms-2" @onclick='() => searchText = ""'>Clear</button>
+            </div>
+        }
+    </div>
+    
+    @if(isLoading)
+    {
+        <div class="text-center my-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2 text-muted">Fetching upcoming events...</p>
+        </div>
+    }
+    else if (!FilteredEvents.Any())
+    {
+        <div class="alert alert-info text-center py-5">
+            <i class="bi bi-calendar-x fs-1 mb-3 d-block"></i>
+            <h4>No Events Found</h4>
+            <p>There are currently no events matching your filter.</p>
+        </div>
+    }
+    else
+    {
+        <div class="row">
+            @foreach (var item in FilteredEvents)
+            {
+                <div class="col-md-4 mb-4">
+                    <div class="card h-100 shadow-sm border-0 transition-hover">
+                        @if(!string.IsNullOrEmpty(item.Cover))
+                        {
+                            <img class="card-img-top object-fit-cover" src="@item.Cover" style="height:200px;" alt="@item.Title" />
+                        }
+                        else
+                        {
+                            <div class="bg-light text-secondary d-flex align-items-center justify-content-center card-img-top" style="height:200px;">
+                                <i class="bi bi-image fs-1"></i>
+                            </div>
+                        }
+                        
+                        <div class="card-body d-flex flex-column">
+                            <h5 class="card-title text-primary fw-bold">@item.Title</h5>
+                            <ul class="list-unstyled text-muted small mb-3">
+                                <li class="mb-1"><i class="bi bi-calendar-event me-2"></i> @item.Date</li>
+                                <li><i class="bi bi-geo-alt me-2"></i> @item.Location</li>
+                            </ul>
+                            <p class="card-text text-truncate-3">@item.Description</p>
+                            
+                            <div class="mt-auto pt-3 border-top d-flex gap-2">
+                                <button class="btn btn-primary w-100" @onclick="()=>NavigateToDetails(item.Id)">
+                                    View Details
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@if(!string.IsNullOrEmpty(statusMessage))
+{
+    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+        <div class="toast show align-items-center text-bg-danger border-0" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body">
+                    @statusMessage
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" @onclick='() => statusMessage = ""'></button>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    .text-truncate-3 {
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+    .transition-hover {
+        transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+    }
+    .transition-hover:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 20px rgba(0,0,0,0.1) !important;
+    }
+</style>
+
+@code {
+    private List<EventViewModel> events = new();
+    private bool isLoading = true;
+    string statusMessage = "";
+    private string currentFilter = "All";
+    private string searchText = "";
+
+    private IEnumerable<EventViewModel> FilteredEvents
+    {
+        get
+        {
+            var filtered = currentFilter switch
+            {
+                "Upcoming" => events.Where(e => DateTime.TryParse(e.Date, out var d) && d > DateTime.Now),
+                "Ongoing" => events.Where(e => DateTime.TryParse(e.Date, out var d) && d.Date == DateTime.Now.Date),
+                _ => events
+            };
+
+            if (!string.IsNullOrWhiteSpace(searchText))
+            {
+                filtered = filtered.Where(e => 
+                    (e.Title?.Contains(searchText, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    (e.Location?.Contains(searchText, StringComparison.OrdinalIgnoreCase) ?? false));
+            }
+
+            return filtered;
+        }
+    }
+
+    private void SetFilter(string filter)
+    {
+        currentFilter = filter;
+    }
+    
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        try
+        {
+            events = await JS.InvokeAsync<List<EventViewModel>>("firebaseInterop.getEvents");
+        }
+        catch (Exception ex)
+        {
+            statusMessage = "Error connecting to database: " + ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void NavigateToEdit(string id) => Nav.NavigateTo($"/ManageEvents/{id}");
+    private void NavigateToDetails(string id) => Nav.NavigateTo($"/EventDetails/{id}");
+
+    public class EventViewModel : Event { public string Id { get; set; } }
+
+    private async Task ConfirmDelete(string id)
+    {
+        if(await JS.InvokeAsync<bool>("confirm", "Are you sure you want to delete this event? This action cannot be undone."))
+        {
+            statusMessage = "";
+            try
+            {
+                await JS.InvokeVoidAsync("firebaseInterop.deleteEvent", id);
+                await LoadData();
+            }
+            catch (Exception ex)
+            {
+                statusMessage = "Error deleting event: " + ex.Message;
+            }
+        }
+    }
+}

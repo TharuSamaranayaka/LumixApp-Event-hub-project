@@ -1,0 +1,123 @@
+﻿<div class="top-row ps-3 navbar navbar-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand d-flex align-items-center lh-sm" href="">
+            <i class="bi bi-mortarboard-fill fs-3 me-2" style="color: #FFD700;"></i>
+            <span style="font-size: 0.95rem; font-weight: bold;">Lumix University<br/><span style="font-size: 0.8rem; font-weight: normal; color: #ccc;">Digital Events</span></span>
+        </a>
+        <button title="Navigation menu" class="navbar-toggler" @onclick="ToggleNavMenu">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+    </div>
+</div>
+
+<div class="@NavMenuCssClass nav-scrollable" @onclick="ToggleNavMenu">
+    <nav class="nav flex-column">
+        
+        @if (isAdmin)
+        {
+            <div class="nav-item px-3 mt-4 mb-3">
+                <small class="text-uppercase fw-bold text-warning" style="letter-spacing: 1px; font-size: 0.75rem;">Admin Dashboard</small>
+            </div>
+            <div class="nav-item px-3">
+                <NavLink class="nav-link custom-admin-link" href="AdminDashboard" Match="NavLinkMatch.All">
+                    <i class="bi bi-speedometer2 fs-5"></i> <span>Dashboard</span>
+                </NavLink>
+            </div>
+            <div class="nav-item px-3 mt-2">
+                <NavLink class="nav-link custom-admin-link" href="AdminViewEvents">
+                    <i class="bi bi-calendar-event fs-5"></i> <span>Manage Events</span>
+                </NavLink>
+            </div>
+            <div class="nav-item px-3 mt-2">
+                <NavLink class="nav-link custom-admin-link" href="AdminAnalytics">
+                    <i class="bi bi-graph-up fs-5"></i> <span>Analytics Hub</span>
+                </NavLink>
+            </div>
+            <div class="nav-item px-3 mt-2">
+                <NavLink class="nav-link custom-admin-link" href="AdminUsers">
+                    <i class="bi bi-people fs-5"></i> <span>Student Users</span>
+                </NavLink>
+            </div>
+            <div class="nav-item px-3 mt-5 border-top pt-4">
+                <button class="nav-link custom-admin-link logout-btn w-100 text-start" @onclick="HandleLogout">
+                    <i class="bi bi-box-arrow-right fs-5 text-danger"></i> <span class="text-danger fw-bold">Logout</span>
+                </button>
+            </div>
+        }
+        else
+        {
+            <div class="nav-item px-3">
+                <NavLink class="nav-link d-flex align-items-center" href="Home" Match="NavLinkMatch.All">
+                    <i class="bi bi-house-door-fill fs-5"></i> <span>Home</span>
+                </NavLink>
+            </div>
+            <div class="nav-item px-3">
+                <NavLink class="nav-link d-flex align-items-center" href="ViewEvents">
+                    <i class="bi bi-list-task fs-5"></i> <span>View Events</span>
+                </NavLink>
+            </div>
+            <div class="nav-item px-3 mt-4 border-top pt-3">
+                <NavLink class="nav-link d-flex align-items-center" href="Login">
+                    <i class="bi bi-shield-lock fs-5 me-2"></i> <span>Admin Login</span>
+                </NavLink>
+            </div>
+        }
+    </nav>
+</div>
+
+@code {
+    private bool collapseNavMenu = true;
+    private bool isAdmin = false;
+    private DotNetObjectReference<NavMenu>? objRef;
+
+    private string? NavMenuCssClass => collapseNavMenu ? "collapse" : null;
+    [Inject] private IJSRuntime JS { get; set; } = default!;
+    [Inject] private NavigationManager Nav { get; set; } = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        objRef = DotNetObjectReference.Create(this);
+        await JS.InvokeVoidAsync("firebaseInterop.registerAuthStateListener", objRef);
+        
+        try
+        {
+            var user = await JS.InvokeAsync<AuthUser>("firebaseAuth.getUser");
+            CheckAdminRole(user?.Email);
+        }
+        catch { }
+    }
+
+    [JSInvokable]
+    public void OnAuthStateChanged(string? email)
+    {
+        CheckAdminRole(email);
+        StateHasChanged();
+    }
+
+    private void CheckAdminRole(string? email)
+    {
+        isAdmin = !string.IsNullOrEmpty(email) && email.Equals("admin@lumix.edu", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void ToggleNavMenu()
+    {
+        collapseNavMenu = !collapseNavMenu;
+    }
+
+    private async Task HandleLogout()
+    {
+        await JS.InvokeVoidAsync("firebaseAuth.logout");
+        isAdmin = false;
+        Nav.NavigateTo("/Login", forceLoad: true);
+    }
+
+    public void Dispose()
+    {
+        objRef?.Dispose();
+    }
+
+    public class AuthUser
+    {
+        public string Email { get; set; }
+    }
+}

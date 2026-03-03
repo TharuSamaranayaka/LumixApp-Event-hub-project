@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Seeding Database...</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 20px;
+        }
+
+        .success {
+            color: green;
+            font-weight: bold;
+        }
+
+        .error {
+            color: red;
+        }
+    </style>
+</head>
+
+<body>
+    <h3>Adding Sample Events to Lumix Events...</h3>
+    <div id="output">App starting...</div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyCaN3c_2RRj_8Pa2x09lx2w1uLyI88cqQA",
+            authDomain: "lumixevents.firebaseapp.com",
+            projectId: "lumixevents",
+            storageBucket: "lumixevents.firebasestorage.app",
+            messagingSenderId: "65335614935",
+            appId: "1:65335614935:web:4398149204e003da627f92"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        const events = [
+            {
+                Title: "Annual Technology Symposium",
+                Description: "Join industry leaders and university alumni for a day of tech talks, networking, and innovation showcases. Perfect for computing and engineering students.",
+                Date: "2026-03-15T09:00",
+                Location: "Main Auditorium, Lumix Campus",
+                Cover: "https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=500&h=300&fit=crop"
+            },
+            {
+                Title: "Career Fair & Networking",
+                Description: "Meet with top recruiters from over 50 companies looking for interns and full-time hires. Don't forget to bring your updated resume!",
+                Date: "2026-03-20T10:00",
+                Location: "University Gymnasium",
+                Cover: "https://images.unsplash.com/photo-1542744173-8e7e53415bb0?w=500&h=300&fit=crop"
+            },
+            {
+                Title: "Student Art Exhibition: Perspectives",
+                Description: "Explore the creative works of our final year Fine Arts students. The exhibition features paintings, sculptures, and digital media.",
+                Date: "2026-03-10T14:00",
+                Location: "Creative Arts Building - Gallery A",
+                Cover: "https://images.unsplash.com/photo-1460661419201-fd4cecdf8a8b?w=500&h=300&fit=crop"
+            },
+            {
+                Title: "Hackathon 2026: Code for Good",
+                Description: "A 48-hour coding marathon focused on building solutions for environmental sustainability. Food and sleeping arrangements provided!",
+                Date: "2026-04-05T18:00",
+                Location: "Innovation Hub",
+                Cover: "https://images.unsplash.com/photo-1504384308090-c894fdcc538d?w=500&h=300&fit=crop"
+            }
+        ];
+
+        async function seedData() {
+            let output = document.getElementById("output");
+            output.innerHTML = "Connecting to database...<br>";
+            try {
+                for (let event of events) {
+                    await addDoc(collection(db, "events"), event);
+                    output.innerHTML += `&#10004; Added event: <strong>${event.Title}</strong><br>`;
+                }
+                output.innerHTML += `<br><h3 class='success'>Successfully added 4 sample events!</h3><p>You can now close this tab, go back to your app, and refresh the Home page.</p>`;
+            } catch (e) {
+                output.innerHTML += `<p class='error'>Error: ${e.message}</p>`;
+            }
+        }
+
+        seedData();
+    </script>
+</body>
+
+</html>

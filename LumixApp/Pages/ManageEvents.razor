@@ -1,0 +1,156 @@
+@using LumixApp.Models;
+@page "/ManageEvents"
+@page "/ManageEvents/{Id}"
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+
+<PageTitle>Manage Events</PageTitle>
+
+<div class="container mt-4">
+    <div class="card shadow-sm">
+        <div class="card-header bg-primary text-white">
+            <h4 class="mb-0">@(string.IsNullOrEmpty(Id) ? "Add New Event" : "Edit Event")</h4>
+        </div>
+        <div class="card-body">
+            <EditForm Model="@eventItem" OnValidSubmit="HandleSubmit">
+                <div class="mb-3">
+                    <label class="form-label">Event Title</label>
+                    <InputText type="text" required class="form-control" @bind-value="eventItem.Title" />
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label">Description</label>
+                    <InputTextArea class="form-control" rows="4" @bind-value="eventItem.Description"></InputTextArea>
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Date and Time</label>
+                        <InputText required class="form-control" @bind-Value="eventItem.Date" placeholder="e.g. 2024-10-25 10:00 AM" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Location</label>
+                        <InputText type="text" required class="form-control" @bind-value="eventItem.Location" />
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Joining Code (Self Check-in)</label>
+                    <InputText type="text" required class="form-control" @bind-value="eventItem.JoiningCode" placeholder="e.g. JOIN2026" />
+                    <small class="text-muted">Students will enter this code at the event to automatically mark their attendance.</small>
+                </div>
+
+                <div class="mb-4">
+                    <label class="form-label">Cover Image</label>
+                    <InputFile OnChange="OnInputFileChange" class="form-control" />
+                    @if(!string.IsNullOrEmpty(eventItem.Cover))
+                    {
+                        <div class="mt-2">
+                            <img src="@eventItem.Cover" style="max-height: 150px; border-radius: 5px;" />
+                        </div>
+                    }
+                </div>
+
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-primary px-4" disabled="@isSubmitting">
+                        @if(isSubmitting)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                            <span>Saving...</span>
+                        }
+                        else
+                        {
+                            <span>Save Event</span>
+                        }
+                    </button>
+                    <button class="btn btn-outline-secondary px-4" @onclick='()=> Nav.NavigateTo("/AdminViewEvents")' type="button">Cancel</button>
+                </div>
+
+                @if(!string.IsNullOrEmpty(statusMessage))
+                {
+                    <div class="mt-3 alert alert-info">@statusMessage</div>
+                }
+            </EditForm>
+        </div>
+    </div>
+</div>
+
+@code {
+    Event eventItem = new Event();
+    private bool isSubmitting = false;
+    private string statusMessage = "";
+    private IBrowserFile? selectedFile;
+    [Parameter] public string Id { get; set; }
+
+    private async Task OnInputFileChange(InputFileChangeEventArgs e)
+    {
+        selectedFile = e.File;
+        var buffer = new byte[e.File.Size];
+        await e.File.OpenReadStream(1024 * 500).ReadAsync(buffer);
+        eventItem.Cover = $"data:{e.File.ContentType};base64,{Convert.ToBase64String(buffer)}";
+    }
+
+    private async Task HandleSubmit()
+    {
+        isSubmitting = true;
+        statusMessage = "";
+
+        // Task 2: Date Validation (Must not be in the past)
+        if (DateTime.TryParse(eventItem.Date, out DateTime parsedDate))
+        {
+            if (parsedDate < DateTime.Now.Date)
+            {
+                statusMessage = "Validation Error: Event date cannot be set in the past.";
+                isSubmitting = false;
+                return;
+            }
+        }
+        else
+        {
+            statusMessage = "Validation Error: Invalid date format.";
+            isSubmitting = false;
+            return;
+        }
+
+        try
+        {
+            if (selectedFile != null)
+            {
+                var buffer = new byte[selectedFile.Size];
+                using var stream = selectedFile.OpenReadStream(maxAllowedSize: 1024 * 500);
+                await stream.ReadAsync(buffer);
+                string value = Convert.ToBase64String(buffer);
+                eventItem.Cover = $"data:{selectedFile.ContentType};base64,{value}";
+            }
+            if(string.IsNullOrEmpty(Id))
+            {
+                await JS.InvokeVoidAsync("firebaseInterop.saveEvent", eventItem);
+                statusMessage = "Event added successfully!";
+                Nav.NavigateTo("/AdminViewEvents");
+            }
+            else
+            {
+                await JS.InvokeVoidAsync("firebaseInterop.updateEvent", Id, eventItem);
+                statusMessage = "Event updated successfully!";
+            }
+        }
+        catch (Exception ex)
+        {
+            statusMessage = "Error saving event data: " + ex.Message;
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if(!string.IsNullOrEmpty(Id))
+        {
+            var eventToUpdate = await JS.InvokeAsync<Event>("firebaseInterop.getEventById",Id);
+            if (eventToUpdate != null)
+                eventItem = eventToUpdate;
+        }
+    }
+}

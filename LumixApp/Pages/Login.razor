@@ -1,0 +1,112 @@
+﻿@page "/Login"
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+<PageTitle>Login - Lumix Digital Events</PageTitle>
+
+<div class="d-flex justify-content-center align-items-center vh-100" 
+     style="background: radial-gradient(circle, rgba(0, 33, 71, 0.6) 0%, rgba(0, 33, 71, 0.9) 100%), url('images/university_bg_ceremony.jpg'); background-size: cover; background-position: center;">
+    <div class="card shadow-lg border-0" style="width: 400px; border-radius: 15px; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px);">
+        <div class="card-header text-center text-white border-0 py-4" style="background-color: #002147; border-top-left-radius: 15px; border-top-right-radius: 15px;">
+            <i class="bi bi-mortarboard-fill" style="color: #FFD700; font-size: 3rem;"></i>
+            <h3 class="mt-2 fw-bold mb-0">Lumix University</h3>
+            <p class="mb-0 small fw-medium" style="color: #FFD700; letter-spacing: 1px;">DIGITAL EVENTS PORTAL</p>
+        </div>
+        <div class="card-body p-4 pt-5">
+            <div class="text-center mb-4">
+                <h4 class="fw-bold" style="color: #333;">Admin Login</h4>
+                <p class="text-muted small">Please enter your credentials to continue</p>
+            </div>
+            
+            <div class="mb-3">
+                <div class="input-group">
+                    <span class="input-group-text bg-light border-end-0"><i class="bi bi-envelope text-muted"></i></span>
+                    <input @bind="email" class="form-control bg-light border-start-0" placeholder="name@lumix.edu" style="box-shadow: none;"/>
+                </div>
+            </div>
+            <div class="mb-4">
+                <div class="input-group">
+                    <span class="input-group-text bg-light border-end-0"><i class="bi bi-lock text-muted"></i></span>
+                    <input @bind="password" class="form-control bg-light border-start-0" type="password" placeholder="Password" style="box-shadow: none;"/>
+                </div>
+            </div>
+            
+            <button class="btn w-100 text-white fw-bold py-2 shadow-sm mt-2" style="background-color: #002147; border-radius: 8px; transition: all 0.3s;" @onclick="HandleLogin" disabled="@isLoggingIn">
+                @if(isLoggingIn)
+                {
+                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                    <span>Authenticating...</span>
+                }
+                else
+                {
+                    <span>Sign In</span>
+                }
+            </button>
+            
+            @if (!string.IsNullOrEmpty(error))
+            {
+                <div class="alert alert-danger mt-4 py-2 text-center small border-0 shadow-sm" style="border-radius: 8px;">
+                    <i class="bi bi-exclamation-circle me-1"></i> @error
+                </div>
+            }
+        </div>
+        <div class="card-footer bg-transparent border-0 text-center pb-4">
+            <small class="text-muted">&copy; 2026 Lumix Digital Services</small>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string email = "";
+    private string password = "";
+    private string error = "";
+    private bool isLoggingIn = false;
+
+    public class AuthResult
+    {
+        public bool Success { get; set; }
+        public string Error { get; set; }
+    }
+    private async Task HandleLogin()
+    {
+        error = "";
+        
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            error = "Email is required";
+            return;
+        }
+        
+        if (!email.EndsWith("@lumix.edu", StringComparison.OrdinalIgnoreCase))
+        {
+            error = "Email must be a @lumix.edu address";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(password))
+        {
+            error = "Password is required";
+            return;
+        }
+
+        isLoggingIn = true;
+        
+        var result = await JS.InvokeAsync<AuthResult>("firebaseAuth.signIn", email, password);
+        if(result.Success)
+        {
+            if (email.Equals("admin@lumix.edu", StringComparison.OrdinalIgnoreCase))
+            {
+                Nav.NavigateTo("/AdminDashboard");
+            }
+            else
+            {
+                error = "Access Denied. Admin privileges required.";
+                await JS.InvokeVoidAsync("firebaseAuth.logout");
+            }
+        }
+        else
+        {
+            error = result.Error;
+            isLoggingIn = false;
+        }
+    }
+}
